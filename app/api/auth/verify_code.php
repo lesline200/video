@@ -2,9 +2,6 @@
 // app/api/auth/verify_code.php
 // Verifie le code 6 chiffres SANS modifier le mot de passe
 
-error_log('[verify_code] Method: ' . $_SERVER['REQUEST_METHOD']);
-error_log('[verify_code] Body: ' . file_get_contents('php://input'));
-
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../config/config.php';
 require_once __DIR__ . '/../../helpers/response_helper.php';
