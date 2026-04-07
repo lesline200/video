@@ -44,9 +44,17 @@ if (!$series) {
 switch ($action) {
 
     case 'delete':
+        // Compter les vidéos associées avant suppression (CASCADE les supprimera)
+        $stmtCount = $db->prepare('SELECT COUNT(*) as count FROM videos WHERE series_id = ?');
+        $stmtCount->execute([$seriesId]);
+        $videoCount = (int) $stmtCount->fetch()['count'];
+
         $db->prepare('DELETE FROM content_series WHERE id = ? AND user_id = ?')
            ->execute([$seriesId, (string) $userId]);
-        jsonSuccess(['message' => 'Series deleted successfully']);
+        jsonSuccess([
+            'message'       => 'Series deleted successfully',
+            'videos_deleted' => $videoCount,
+        ]);
         break;
 
     case 'toggle':
