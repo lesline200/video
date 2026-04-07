@@ -6,7 +6,7 @@ require_once __DIR__ . '/../../config/config.php';
 require_once __DIR__ . '/../../helpers/response_helper.php';
 require_once __DIR__ . '/../../helpers/auth_helper.php';
 
-require_once __DIR__ . '/../../../vendor/phpmailer/autoload.php/';
+require_once __DIR__ . '/../../../vendor/phpmailer/autoload.php';
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
@@ -28,7 +28,7 @@ if (!validateEmail($email)) {
 
 $db = getDB();
 
-$stmt = $db->prepare('SELECT id, name FROM users WHERE email = ? AND is_active = 1 LIMIT 1');
+$stmt = $db->prepare('SELECT id, name FROM users WHERE email = ? AND deleted_at IS NULL LIMIT 1');
 $stmt->execute([$email]);
 $user = $stmt->fetch();
 

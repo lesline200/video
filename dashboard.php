@@ -21,6 +21,9 @@ $stats = [
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600&display=swap" rel="stylesheet">
 <title>Dashboard — VidGenius</title>
 <style>
 /* ═══════════════════════════════
@@ -898,6 +901,13 @@ input[type=range]{width:100%;accent-color:var(--blue);cursor:pointer}
       </button>
     </div>
  
+    <!-- Barre de recherche -->
+    <div style="margin-bottom:1rem">
+      <input type="text" id="videoSearch" class="input" placeholder="Search videos by title, description or series..."
+        style="max-width:400px;padding:.55rem 1rem;font-size:.85rem"
+        oninput="filterVideos()">
+    </div>
+
     <!-- Filtres -->
     <div class="vf-bar">
       <div class="vf-pills">
@@ -937,8 +947,21 @@ input[type=range]{width:100%;accent-color:var(--blue);cursor:pointer}
       <button class="btn btn-primary" onclick="navigate('create')">Create a series</button>
     </div>
  
+    <!-- Indicateur de chargement -->
+    <div id="videosLoading" style="display:none;text-align:center;padding:3rem">
+      <div class="spinner" style="margin:0 auto 1rem"></div>
+      <p style="color:var(--txt-3);font-size:.85rem">Loading videos...</p>
+    </div>
+
     <!-- Grille portrait -->
     <div id="videosGrid"></div>
+
+    <!-- Pagination -->
+    <div id="videosPagination" style="display:none;margin-top:1.5rem;text-align:center">
+      <button class="btn btn-secondary" id="btnLoadMore" onclick="loadMoreVideos()"
+        style="padding:.5rem 1.5rem;font-size:.85rem">Load more videos</button>
+      <p id="paginationInfo" style="margin-top:.5rem;font-size:.78rem;color:var(--txt-3)"></p>
+    </div>
   </div>
  
   <!-- ── Vue détail ── -->
@@ -1858,7 +1881,7 @@ async function toggleSeries(seriesId) {
 }
 
 async function deleteSeries(seriesId, seriesName) {
-  if (!confirm(`Delete "${seriesName}"? This cannot be undone.`)) return;
+  if (!confirm(`Delete "${seriesName}"? All associated videos will also be deleted. This cannot be undone.`)) return;
   try {
     const res  = await fetch('/video/app/api/series/update.php', {
       method:'POST', headers:{'Content-Type':'application/json'},
@@ -1931,6 +1954,15 @@ async function submitSeries() {
 let allVideos          = [];
 let activeStatusFilter = 'all';
 let currentVideoId     = null;
+let videoPagination    = { page:1, pages:1, total:0 };
+
+// ── Protection XSS ─────────────────────────────────────────
+function escHtml(str) {
+  if (!str) return '';
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
 
 function getPortraitThumb(url) {
   if (!url) return null;
@@ -1938,20 +1970,42 @@ function getPortraitThumb(url) {
   return url;
 }
 
-async function loadVideos() {
+async function loadVideos(append) {
+  const loading = document.getElementById('videosLoading');
+  if (loading && !append) loading.style.display = 'block';
   try {
-    const res  = await fetch('/video/app/api/videos/list.php', { credentials:'include' });
+    const page = append ? videoPagination.page + 1 : 1;
+    const res  = await fetch(`/video/app/api/videos/list.php?page=${page}&per_page=50`, { credentials:'include' });
     const data = await res.json();
     if (!data.success) return;
-    allVideos = data.videos;
+    if (append) {
+      allVideos = allVideos.concat(data.videos);
+    } else {
+      allVideos = data.videos;
+    }
+    videoPagination = data.pagination || { page:1, pages:1, total:allVideos.length };
     const seriesSet = [...new Set(allVideos.map(v => v.series_name).filter(Boolean))];
     const sel = document.getElementById('filterSeries');
     if (sel) {
       sel.innerHTML = '<option value="all">All Series</option>' +
-        seriesSet.map(s => `<option value="${s}">${s}</option>`).join('');
+        seriesSet.map(s => `<option value="${escHtml(s)}">${escHtml(s)}</option>`).join('');
+    }
+    // Afficher/masquer bouton pagination
+    const pagDiv = document.getElementById('videosPagination');
+    const pagInfo = document.getElementById('paginationInfo');
+    if (pagDiv) {
+      pagDiv.style.display = videoPagination.page < videoPagination.pages ? 'block' : 'none';
+    }
+    if (pagInfo) {
+      pagInfo.textContent = `Showing ${allVideos.length} of ${videoPagination.total} videos`;
     }
     filterVideos();
   } catch(err) { console.error(err); }
+  if (loading) loading.style.display = 'none';
+}
+
+function loadMoreVideos() {
+  loadVideos(true);
 }
 
 function setVideoFilter(value, btn) {
@@ -1964,15 +2018,24 @@ function setVideoFilter(value, btn) {
 function filterVideos() {
   const sel  = document.getElementById('filterSeries');
   const sort = document.getElementById('sortVideos');
+  const searchInput = document.getElementById('videoSearch');
   if (!sel || !sort) return;
 
   const seriesFilter = sel.value;
   const sortVal      = sort.value;
+  const searchTerm   = (searchInput ? searchInput.value : '').toLowerCase().trim();
 
   let filtered = allVideos.filter(v => {
     const ms  = activeStatusFilter === 'all' || v.status === activeStatusFilter;
     const mse = seriesFilter === 'all' || v.series_name === seriesFilter;
-    return ms && mse;
+    // Recherche textuelle
+    let msr = true;
+    if (searchTerm) {
+      msr = (v.title || '').toLowerCase().includes(searchTerm)
+         || (v.description || '').toLowerCase().includes(searchTerm)
+         || (v.series_name || '').toLowerCase().includes(searchTerm);
+    }
+    return ms && mse && msr;
   });
 
   if (sortVal === 'newest')   filtered.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
@@ -2006,11 +2069,15 @@ function renderVideos(videos) {
     const dur   = fmtDur(v.duration_seconds);
     const dot   = statusDot[v.status] || '#94a3b8';
     const thumb = getPortraitThumb(v.thumbnail_url);
+    const safeId    = escHtml(v.id);
+    const safeName  = escHtml(v.series_name || 'Unknown');
+    const safeNiche = escHtml(v.niche || '');
+    const safeTitle = escHtml(v.title || '');
     return `
-      <div class="card vcard" onclick="openVideoDetail('${v.id}')">
+      <div class="card vcard" data-videoid="${safeId}" onclick="openVideoDetail(this.dataset.videoid)">
         <div class="vcard-thumb">
           ${thumb
-            ? `<img src="${thumb}" alt="" loading="lazy" onerror="this.style.display='none'"
+            ? `<img src="${escHtml(thumb)}" alt="" loading="lazy" onerror="this.style.display='none'"
                 style="width:100%;height:100%;object-fit:cover;object-position:center top;display:block"/>`
             : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;">
                 <svg width="32" height="32" fill="none" stroke="rgba(148,163,184,.4)" viewBox="0 0 24 24">
@@ -2023,7 +2090,7 @@ function renderVideos(videos) {
               <span class="vcard-status-dot" style="background:${dot}"></span>
             </div>
             <div class="vcard-bottom">
-              <span class="badge ${statusBadge[v.status]||'badge-gray'}" style="font-size:.65rem">${v.status}</span>
+              <span class="badge ${statusBadge[v.status]||'badge-gray'}" style="font-size:.65rem">${escHtml(v.status)}</span>
               ${dur ? `<span class="vcard-duration">${dur}</span>` : '<span></span>'}
             </div>
           </div>
@@ -2033,8 +2100,9 @@ function renderVideos(videos) {
             </div>` : ''}
         </div>
         <div class="vcard-body">
-          <p class="vcard-series">${v.series_name || 'Unknown'}</p>
-          <p class="vcard-meta">${v.niche ? v.niche+' · ' : ''}${new Date(v.created_at).toLocaleDateString()}</p>
+          ${safeTitle ? `<p class="vcard-title" style="font-size:.85rem;font-weight:600;margin-bottom:.15rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${safeTitle}</p>` : ''}
+          <p class="vcard-series">${safeName}</p>
+          <p class="vcard-meta">${safeNiche ? safeNiche+' &middot; ' : ''}${new Date(v.created_at).toLocaleDateString()}</p>
         </div>
       </div>`;
   }).join('');
@@ -2051,9 +2119,10 @@ function openVideoDetail(videoId) {
   setEl('detailBreadcrumb', v.series_name || 'Video');
   setEl('detailDate',       new Date(v.created_at).toLocaleDateString('en-US',{day:'numeric',month:'short',year:'numeric'}));
   setEl('detailDuration',   fmtDur(v.duration_seconds));
-  setEl('statViews',        v.views  ? v.views.toLocaleString()  : '—');
-  setEl('statLikes',        v.likes  ? v.likes.toLocaleString()  : '—');
-  setEl('statShares',       v.shares ? v.shares.toLocaleString() : '—');
+  // Stats (views/likes/shares) désactivées pour le moment
+  // setEl('statViews',  v.views  ? v.views.toLocaleString()  : '—');
+  // setEl('statLikes',  v.likes  ? v.likes.toLocaleString()  : '—');
+  // setEl('statShares', v.shares ? v.shares.toLocaleString() : '—');
 
   const badge = document.getElementById('detailBadge');
   if (badge) { badge.className = `badge ${statusClass[v.status]||'badge-gray'}`; badge.textContent = v.status; }
@@ -2107,7 +2176,7 @@ function openVideoDetail(videoId) {
 
   const errEl = document.getElementById('detailError');
   if (errEl) {
-    if (v.error_message) { errEl.textContent = '⚠ ' + v.error_message; errEl.style.display = 'block'; }
+    if (v.error_message) { errEl.textContent = '\u26A0 ' + v.error_message; errEl.style.display = 'block'; }
     else { errEl.style.display = 'none'; }
   }
 
@@ -2152,18 +2221,7 @@ async function deleteCurrentVideo() {
   } catch(err) { alert(err.message || 'Error deleting video.'); }
 }
 
-async function deleteVideo(videoId) {
-  if (!confirm('Delete this video? This cannot be undone.')) return;
-  try {
-    const res  = await fetch('/video/app/api/videos/delete.php', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ video_id: videoId }), credentials:'include',
-    });
-    const data = await res.json();
-    if (!data.success) throw new Error(data.error);
-    loadVideos(); loadSeries();
-  } catch(err) { alert(err.message || 'Error deleting video.'); }
-}
+// deleteVideo() supprimée — utiliser deleteCurrentVideo() depuis la vue détail
 
 function updateVdCount(fieldId, countId, max) {
   const el  = document.getElementById(fieldId);
@@ -2180,14 +2238,47 @@ function togglePublished() {
 }
 
 async function saveVideoDetail() {
+  if (!currentVideoId) return;
   const btn = document.getElementById('vdSaveBtn');
   if (!btn) return;
   btn.disabled = true;
   btn.innerHTML = `<div class="spinner spinner-white"></div> Saving…`;
-  await new Promise(r => setTimeout(r, 900));
-  btn.classList.add('saved');
-  btn.innerHTML = `<svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg> Saved!`;
+
+  const titleEl = document.getElementById('vdTitle');
+  const descEl  = document.getElementById('vdDesc');
+  const dateEl  = document.getElementById('vdSchedDate');
+  const timeEl  = document.getElementById('vdSchedTime');
+  const pubEl   = document.getElementById('vdPublished');
+
+  const body = { video_id: currentVideoId };
+  if (titleEl) body.title       = titleEl.value.trim();
+  if (descEl)  body.description = descEl.value.trim();
+  if (dateEl && dateEl.value) {
+    body.scheduled_at = dateEl.value + ' ' + (timeEl ? timeEl.value : '14:30') + ':00';
+  }
+  if (pubEl) body.is_published = pubEl.checked;
+
+  try {
+    const res  = await fetch('/video/app/api/videos/update.php', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(body), credentials:'include',
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error);
+    btn.classList.add('saved');
+    btn.innerHTML = `<svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg> Saved!`;
+    // Mettre à jour les données locales
+    const v = allVideos.find(x => x.id === currentVideoId);
+    if (v) {
+      if (body.title !== undefined)       v.title       = body.title;
+      if (body.description !== undefined) v.description = body.description;
+    }
+  } catch(err) {
+    alert(err.message || 'Error saving video.');
+    btn.innerHTML = `<svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg> Save Changes`;
+  }
   btn.disabled = false;
   setTimeout(() => {
     btn.classList.remove('saved');
@@ -2223,26 +2314,7 @@ document.addEventListener('keydown', e => {
 });
 </script>
 
-<script>
-window.addEventListener('load', function() {
-    let link = document.createElement('link');
-    link.href = "https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600&display=swap";
-    link.rel = "stylesheet";
-    document.head.appendChild(link);
-
-    link = document.createElement('link');
-    link.href = "https://fonts.googleapis.com";
-    link.rel = "preconnect";
-    document.head.appendChild(link);
-
-     link = document.createElement('link');
-    link.href = "https://fonts.gstatic.com";
-    link.rel = "preconnect";
-    document.head.appendChild(link);
-
-    
-});
-</script>
+<!-- Google Fonts chargées dans <head> via preconnect + stylesheet -->
 
 
 </body>
