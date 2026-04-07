@@ -293,16 +293,15 @@ error_reporting(E_ALL);
     document.getElementById('codeBtnText').textContent = 'Verifying…';
 
     try {
-      const res  = await fetch(`${API_URL}/app/api/auth/reset_password.php`, {
+      const res  = await fetch(`${API_URL}/app/api/auth/verify_code.php`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // On vérifie juste le code sans changer le mot de passe encore
-        body: JSON.stringify({ code, new_password: 'VERIFY_ONLY_placeholder_123' }),
+        body: JSON.stringify({ code }),
         credentials: 'include',
       });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Invalid code.');
 
-      // Si le code est valide on passe à l'étape 3
-      // On utilise une vérification séparée ici
       resetCode = code;
       showStep('reset');
 
