@@ -53,11 +53,7 @@ $stmtCount->execute($params);
 $total = (int) $stmtCount->fetch()['total'];
 
 // ── Récupérer les vidéos ────────────────────────────────────
-$params[] = $perPage;
-$params[] = $offset;
-
-$stmt = $db->prepare(
-    'SELECT v.id, v.series_id, v.status, v.video_url, v.thumbnail_url,
+$sql = 'SELECT v.id, v.series_id, v.status, v.video_url, v.thumbnail_url,
             v.duration_seconds, v.created_at, v.error_message,
             v.title, v.description, v.hashtags_used,
             v.scheduled_at, v.is_published,
@@ -66,8 +62,9 @@ $stmt = $db->prepare(
      LEFT JOIN content_series cs ON v.series_id = cs.id
      WHERE v.user_id = ?' . $statusFilter . $searchFilter . '
      ORDER BY v.created_at DESC
-     LIMIT ? OFFSET ?'
-);
+     LIMIT ' . (int) $perPage . ' OFFSET ' . (int) $offset;
+
+$stmt = $db->prepare($sql);
 $stmt->execute($params);
 $videos = $stmt->fetchAll();
 
