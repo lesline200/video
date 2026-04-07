@@ -28,7 +28,7 @@ if (!validateEmail($email)) {
 
 $db = getDB();
 
-$stmt = $db->prepare('SELECT id, name FROM users WHERE email = ? AND is_active = 1 LIMIT 1');
+$stmt = $db->prepare('SELECT id, name FROM users WHERE email = ? AND deleted_at IS NULL LIMIT 1');
 $stmt->execute([$email]);
 $user = $stmt->fetch();
 
