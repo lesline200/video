@@ -84,9 +84,29 @@ class VoiceService
         //     throw new Exception('Audio file is empty or too small');
         // }
 
-        $response = file_get_contents('C:/wamp64/www/video/voice.mp3');
-        file_put_contents($outputFile, $response);
- 
+        // S'assurer que le dossier de sortie existe et qu'on a un chemin de fichier valide
+        if (!is_dir(AUDIO_DIR)) {
+            mkdir(AUDIO_DIR, 0755, true);
+        }
+        if (empty($outputFile)) {
+            $outputFile = AUDIO_DIR . '/' . uniqid('audio_') . '.mp3';
+        }
+
+        // Utiliser le fichier voice.mp3 fourni à la racine du projet (portable Windows/Linux)
+        $sampleVoice = __DIR__ . '/../../voice.mp3';
+        if (!file_exists($sampleVoice)) {
+            throw new Exception('Sample voice file not found at ' . $sampleVoice);
+        }
+
+        $response = file_get_contents($sampleVoice);
+        if ($response === false) {
+            throw new Exception('Failed to read sample voice file');
+        }
+
+        if (file_put_contents($outputFile, $response) === false) {
+            throw new Exception('Failed to write audio file to ' . $outputFile);
+        }
+
         return $outputFile;
     }
  

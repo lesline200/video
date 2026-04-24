@@ -6,7 +6,7 @@ require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../config/config.php';
 require_once __DIR__ . '/../../helpers/response_helper.php';
 require_once __DIR__ . '/../../helpers/auth_helper.php';
-require_once __DIR__ . '/../../services/VideoGenerator.php';
+require_once __DIR__ . '/../../sevices/VideoGenerator.php';
  
 setCorsHeaders();
  
@@ -52,39 +52,34 @@ if ($pending && $pending['count'] > 0) {
     jsonError('A video is already being generated for this series. Please wait for it to complete.', 409);
 }
  
-// Lancer la génération
-
-
 // Créer l'entrée vidéo en BDD immédiatement (status = pending)
-$videoId = uniqid('vid_', true);
+$videoId = sprintf(
+    '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
+    mt_rand(0, 0xffff), mt_rand(0, 0xffff),
+    mt_rand(0, 0xffff),
+    mt_rand(0, 0x0fff) | 0x4000,
+    mt_rand(0, 0x3fff) | 0x8000,
+    mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff)
+);
 $stmt = $db->prepare(
     'INSERT INTO videos (id, series_id, user_id, script, status, queued_at, processing_started_at)
      VALUES (?, ?, ?, ?, "pending", NOW(), NOW())'
 );
 $stmt->execute([$videoId, $seriesId, (string)$userId, '{}']);
 
-// Lancer la génération en arrière-plan (process séparé)
-$phpBin  = PHP_BINARY; // chemin PHP auto-détecté
-$script  = realpath(__DIR__ . '/../../jobs/generate_video_job.php');
-$cmd     = sprintf(
-    '%s %s %s %s %s',
-    escapeshellarg($phpBin),
-    escapeshellarg($script),
-    escapeshellarg($videoId),
-    escapeshellarg($seriesId),
-    escapeshellarg((string)$userId)
-);
+// Lancer la génération de manière synchrone via VideoGenerator
+// (le worker asynchrone app/jobs/generate_video_job.php n'est pas encore fourni)
+try {
+    $generator = new VideoGenerator();
+    $result    = $generator->generateWithId($videoId, $seriesId, (string)$userId, $topic);
 
-// Windows : start /B pour ne pas bloquer
-if (PHP_OS_FAMILY === 'Windows') {
-    pclose(popen('start /B ' . $cmd . ' > NUL 2>&1', 'r'));
-} else {
-    exec($cmd . ' > /dev/null 2>&1 &');
+    jsonSuccess([
+        'message'  => 'Video generated successfully!',
+        'video_id' => $videoId,
+        'status'   => $result['status'] ?? 'completed',
+        'video'    => $result,
+    ]);
+} catch (Exception $e) {
+    error_log('Video generation failed: ' . $e->getMessage());
+    jsonError('Video generation failed: ' . $e->getMessage(), 500);
 }
-
-// Répondre immédiatement au frontend
-jsonSuccess([
-    'message'  => 'Video generation started!',
-    'video_id' => $videoId,
-    'status'   => 'pending',
-], 202);

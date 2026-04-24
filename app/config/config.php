@@ -47,9 +47,9 @@ define('SESSION_EXPIRY',  60 * 60 * 24 * 7); // 7 jours
 
 
 // ─── Chemins fichiers générés ─────────────────────────────────
-define('BASE_DIR',   'C:/wamp64/www/video');
-define('IMAGES_DIR', 'C:/wamp64/www/video');
-define('AUDIO_DIR',  'C:/wamp64/www/video');
+// Note : les constantes IMAGES_DIR, AUDIO_DIR, VIDEOS_DIR et UPLOAD_DIR
+// sont définies dans api_keys.php (relatives au projet, portables).
+// Ne pas les redéfinir ici pour éviter les conflits sur Linux/WAMP.
 
 
 // ─── Initialisation session ──────────────────────────────────────
