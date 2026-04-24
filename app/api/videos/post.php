@@ -6,7 +6,7 @@ require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../config/config.php';
 require_once __DIR__ . '/../../helpers/response_helper.php';
 require_once __DIR__ . '/../../helpers/auth_helper.php';
-require_once __DIR__ . '/../../services/SocialPoster.php';
+require_once __DIR__ . '/../../sevices/SocialPoster.php';
  
 setCorsHeaders();
  

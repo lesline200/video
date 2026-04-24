@@ -88,10 +88,29 @@ class ImageService
         //     throw new Exception('Downloaded image is empty or corrupted');
         // }
 
-        $imageData = file_get_contents('C:/wamp64/www/video/image.jpeg');
-             file_put_contents($outputFile, $imageData);
+        // S'assurer que le dossier de sortie existe et qu'on a un chemin de fichier valide
+        if (!is_dir(IMAGES_DIR)) {
+            mkdir(IMAGES_DIR, 0755, true);
+        }
+        if (empty($outputFile)) {
+            $outputFile = IMAGES_DIR . '/' . uniqid('img_') . '.jpeg';
+        }
 
- 
+        // Utiliser l'image d'exemple fournie à la racine du projet (portable Windows/Linux)
+        $sampleImage = __DIR__ . '/../../image.jpeg';
+        if (!file_exists($sampleImage)) {
+            throw new Exception('Sample image file not found at ' . $sampleImage);
+        }
+
+        $imageData = file_get_contents($sampleImage);
+        if ($imageData === false) {
+            throw new Exception('Failed to read sample image file');
+        }
+
+        if (file_put_contents($outputFile, $imageData) === false) {
+            throw new Exception('Failed to write image file to ' . $outputFile);
+        }
+
         return $outputFile;
     }
  
@@ -114,7 +133,7 @@ class ImageService
                 throw new Exception("Scene {$index} has no image prompt");
             }
  
-            $outputFile = 'C:/wamp64/www/video/' . uniqid("scene_{$index}_") . '.jpeg';
+            $outputFile = IMAGES_DIR . '/' . uniqid("scene_{$index}_") . '.jpeg';
  
             try {
                 $images[] = $this->generateImage($prompt, $style, '1024x1792', $outputFile);
